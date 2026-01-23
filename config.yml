@@ -1,0 +1,7 @@
+fund_code: "007301"
+fund_name: "国联安半导体ETF联接C"
+csindex_code: "H30184"   # 中证全指半导体产品与设备指数代码 :contentReference[oaicite:4]{index=4}
+lookback_days: 180
+report_title: "半导体周期仪表盘周报"
+output_dir: "reports"
+assets_dir: "reports/assets"
