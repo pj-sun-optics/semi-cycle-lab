@@ -1,0 +1,12 @@
+# venv
+.venv/
+
+# python
+__pycache__/
+*.pyc
+
+# logs
+logs/
+
+# optional: keep only sample reports (see README)
+# reports/

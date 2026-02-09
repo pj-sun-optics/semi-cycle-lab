@@ -64,7 +64,7 @@ def load_manual_signals(path: str | Path) -> Dict[str, str]:
 def fetch_fund_nav_history(fund_code: str) -> pd.DataFrame:
     """
     AKShare: fund_open_fund_info_em(fund="007301", indicator="单位净值走势")
-    返回字段通常包括: 净值日期/单位净值/日增长率 等。:contentReference[oaicite:5]{index=5}
+    返回字段通常包括: 净值日期/单位净值/日增长率 等。
     """
     try:
         df = ak.fund_open_fund_info_em(symbol=fund_code, indicator="单位净值走势")
@@ -88,7 +88,7 @@ def fetch_fund_nav_history(fund_code: str) -> pd.DataFrame:
 def fetch_fund_nav_snapshot(fund_code: str) -> pd.Series | None:
     """
     AKShare: fund_open_fund_daily_em() 返回所有开放式基金的当日净值快照。
-    注意：该接口在交易日 16:00-23:00 更新。:contentReference[oaicite:6]{index=6}
+    注意：该接口在交易日 16:00-23:00 更新。
     """
     df = ak.fund_open_fund_daily_em()
     row = df.loc[df["基金代码"] == fund_code]
@@ -255,15 +255,15 @@ def build_markdown(
     # 快照信息（若当日净值未更新则可能为空）
     snap_line = ""
     if snap is not None:
-        snap_line = f"- 快照：单位净值={snap.get('单位净值','')}, 日增长率={snap.get('日增长率','')}（接口在交易日16:00-23:00更新）:contentReference[oaicite:8]{{index=8}}"
+        snap_line = f"- 快照：单位净值={snap.get('单位净值','')}, 日增长率={snap.get('日增长率','')}（接口在交易日16:00-23:00更新）"
 
     notes = manual.get("notes", "")
 
     md = []
     md.append(f"# {cfg.report_title}")
     md.append(f"- 报告日期：{asof.isoformat()}")
-    md.append(f"- 标的：{cfg.fund_name}（{cfg.fund_code}）:contentReference[oaicite:9]{{index=9}}")
-    md.append(f"- 指数估值：中证全指半导体产品与设备指数（{cfg.csindex_code}）:contentReference[oaicite:10]{{index=10}}")
+    md.append(f"- 标的：{cfg.fund_name}（{cfg.fund_code}）")
+    md.append(f"- 指数估值：中证全指半导体产品与设备指数（{cfg.csindex_code}）")
     md.append("")
 
     md.append("## 1) 本周核心结论（只给一个动作）")
@@ -282,7 +282,7 @@ def build_markdown(
     md.append(f"- 4周动量：{mom_4w*100:.2f}%；12周动量：{mom_12w*100:.2f}%")
     md.append(f"- 近{cfg.lookback_days}天最大回撤：{dd*100:.2f}%")
     if val_date is not None:
-        md.append(f"- 估值（PE1）：{pe1:.2f}（日期：{val_date}），近{cfg.lookback_days}天分位：{pe_percentile*100:.1f}% :contentReference[oaicite:11]{{index=11}}")
+        md.append(f"- 估值（PE1）：{pe1:.2f}（日期：{val_date}），近{cfg.lookback_days}天分位：{pe_percentile*100:.1f}% ")
     md.append("")
 
     md.append("## 3) 周期温度计（可解释评分）")
@@ -339,6 +339,59 @@ def _extract_kv_from_report(md_text: str) -> dict:
 
 
 def update_index_md(reports_dir: Path, n_latest: int = 15) -> None:
+    reports_dir = Path(reports_dir)
+    index_path = reports_dir / "index.md"
+
+    md_files = sorted(
+        [p for p in reports_dir.glob("*.md") if p.name.lower() != "index.md"],
+        key=lambda p: p.name,
+        reverse=True,
+    )[:n_latest]
+
+    rows = []
+    for p in md_files:
+        text = p.read_text(encoding="utf-8", errors="replace")
+        kv = _extract_kv_from_report(text)
+        link = f"[{p.stem}]({p.name})"
+        rows.append({
+            "date": kv.get("report_date") or p.stem,
+            "link": link,
+            "score": kv.get("score") or "",
+            "action": kv.get("action") or "",
+            "pe_pct": (kv.get("pe_pct") + "%") if kv.get("pe_pct") else "",
+            "mom_4w": (kv.get("mom_4w") + "%") if kv.get("mom_4w") else "",
+            "mdd": (kv.get("dd") + "%") if kv.get("dd") else "",
+        })
+
+    block = []
+    block.append(f"- 最近更新：{date.today().isoformat()}")
+    block.append(f"- 汇总范围：最近 {len(rows)} 份报告")
+    block.append("")
+    block.append("## 最近周报（倒序）")
+    block.append("")
+    block.append("| 日期 | 报告 | Score | 动作 | PE分位 | 4周动量 | 最大回撤 |")
+    block.append("|---|---|---:|---|---:|---:|---:|")
+    for r in rows:
+        block.append(f"| {r['date']} | {r['link']} | {r['score']} | {r['action']} | {r['pe_pct']} | {r['mom_4w']} | {r['mdd']} |")
+    block_text = "\n".join(block) + "\n"
+
+    start = "<!-- AUTO:START -->"
+    end = "<!-- AUTO:END -->"
+
+    if index_path.exists():
+        txt = index_path.read_text(encoding="utf-8", errors="replace")
+        if start in txt and end in txt:
+            pre = txt.split(start)[0] + start + "\n"
+            post = "\n" + end + txt.split(end)[1]
+            index_path.write_text(pre + block_text + post, encoding="utf-8")
+        else:
+            # 没标记就整文件写默认模板
+            index_path.write_text("# 半导体周期仪表盘 - 周报索引\n\n" + start + "\n" + block_text + end + "\n", encoding="utf-8")
+    else:
+        index_path.write_text("# 半导体周期仪表盘 - 周报索引\n\n" + start + "\n" + block_text + end + "\n", encoding="utf-8")
+
+    print(f"[ok] wrote {index_path}")
+
     """
     汇总最近 n_latest 份 reports/*.md（排除 index.md），生成 reports/index.md
     """
